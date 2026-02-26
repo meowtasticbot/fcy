@@ -131,7 +131,9 @@ async def bot_info(client: Client, message: Message, _):
         f"➤ **Bᴏᴛ ID:** `{bot_id}`\n"
         f"➤ **Cʜᴀɴɴᴇʟ:** @{channel}\n"
         f"➤ **Sᴜᴘᴘᴏʀᴛ Cʜᴀᴛ:** @{support}\n"
-        f"➤ **Bᴏᴛ Sᴛᴀᴛᴜs:** {bot_status}"
+        f"➤ **Bᴏᴛ Sᴛᴀᴛᴜs:** {bot_status}\n"
+        f"➤ **Assistant String Saved:** {assistant_saved}\n"
+        f"➤ **Assistant Status:** {assistant_connected}"
     )
 
 
