@@ -31,7 +31,7 @@ def _is_clone_owner(user_id: int, bot_id: int) -> bool:
 async def set_string_session(client: Client, message: Message, _):
     bot = await client.get_me()
     if not _is_clone_owner(message.from_user.id, bot.id):
-        return await message.reply_text(_["NOT_C_OWNER"].format(SUPPORT_CHAT))
+        return await message.reply_text("You are not allowed to use this connect flow.")
 
     if len(message.command) < 2:
         return await message.reply_text("**Usage:** /setstring <session_string>")
@@ -50,7 +50,7 @@ async def set_string_session(client: Client, message: Message, _):
 async def disconnect_string_session(client: Client, message: Message, _):
     bot = await client.get_me()
     if not _is_clone_owner(message.from_user.id, bot.id):
-        return await message.reply_text(_["NOT_C_OWNER"].format(SUPPORT_CHAT))
+        return await message.reply_text("You are not allowed to use this connect flow.")
 
     clonebotdb.update_one(
         {"bot_id": bot.id},
@@ -66,7 +66,7 @@ async def disconnect_string_session(client: Client, message: Message, _):
 async def transfer_clone_ownership(client: Client, message: Message, _):
     bot = await client.get_me()
     if not _is_clone_owner(message.from_user.id, bot.id):
-        return await message.reply_text(_["NOT_C_OWNER"].format(SUPPORT_CHAT))
+        return await message.reply_text("You are not allowed to use this connect flow.")
 
     new_owner_id = None
     if len(message.command) == 2:
@@ -93,7 +93,7 @@ async def transfer_clone_ownership(client: Client, message: Message, _):
 async def start_connect_flow(client: Client, message: Message, _):
     bot = await client.get_me()
     if not _is_clone_owner(message.from_user.id, bot.id):
-        return await message.reply_text(_["NOT_C_OWNER"].format(SUPPORT_CHAT))
+        return await message.reply_text("You are not allowed to use this connect flow.")
 
     CONNECT_STATES[message.from_user.id] = {
         "step": "api_id",
@@ -107,17 +107,19 @@ async def start_connect_flow(client: Client, message: Message, _):
 
 
 @Client.on_message(filters.private & ~filters.command(["connect", "setstring", "disconnect", "transfer"]))
-@language
-async def continue_connect_flow(client: Client, message: Message, _):
+async def continue_connect_flow(client: Client, message: Message):
     user_id = message.from_user.id
     state = CONNECT_STATES.get(user_id)
     if not state:
         return
 
+    if not message.text:
+        return await message.reply_text("Please send text input only for connect steps.")
+
     bot = await client.get_me()
     if not _is_clone_owner(user_id, bot.id):
         CONNECT_STATES.pop(user_id, None)
-        return await message.reply_text(_["NOT_C_OWNER"].format(SUPPORT_CHAT))
+        return await message.reply_text("You are not allowed to use this connect flow.")
 
     step = state.get("step")
     text = (message.text or "").strip()
@@ -151,15 +153,24 @@ async def continue_connect_flow(client: Client, message: Message, _):
             sent_code = await temp_client.send_code(state["phone"])
         except ApiIdInvalid:
             CONNECT_STATES.pop(user_id, None)
-            await temp_client.disconnect()
+            try:
+                await temp_client.disconnect()
+            except Exception:
+                pass
             return await message.reply_text("Invalid API_ID/API_HASH. Start again with /connect")
         except PhoneNumberInvalid:
             CONNECT_STATES.pop(user_id, None)
-            await temp_client.disconnect()
+            try:
+                await temp_client.disconnect()
+            except Exception:
+                pass
             return await message.reply_text("Invalid phone number. Start again with /connect")
         except Exception as exc:
             CONNECT_STATES.pop(user_id, None)
-            await temp_client.disconnect()
+            try:
+                await temp_client.disconnect()
+            except Exception:
+                pass
             return await message.reply_text(f"Failed to send OTP: {exc}")
 
         state["temp_client"] = temp_client
@@ -185,7 +196,10 @@ async def continue_connect_flow(client: Client, message: Message, _):
                 {"$set": {"string_session": session_string}},
                 upsert=True,
             )
-            await temp_client.disconnect()
+            try:
+                await temp_client.disconnect()
+            except Exception:
+                pass
             CONNECT_STATES.pop(user_id, None)
             return await message.reply_text("✅ Connected successfully. String session generated and saved.")
         except SessionPasswordNeeded:
@@ -194,7 +208,10 @@ async def continue_connect_flow(client: Client, message: Message, _):
         except (PhoneCodeInvalid, PhoneCodeExpired):
             return await message.reply_text("Invalid/expired OTP. Please send OTP again.")
         except Exception as exc:
-            await temp_client.disconnect()
+            try:
+                await temp_client.disconnect()
+            except Exception:
+                pass
             CONNECT_STATES.pop(user_id, None)
             return await message.reply_text(f"Login failed: {exc}")
 
@@ -208,12 +225,18 @@ async def continue_connect_flow(client: Client, message: Message, _):
                 {"$set": {"string_session": session_string}},
                 upsert=True,
             )
-            await temp_client.disconnect()
+            try:
+                await temp_client.disconnect()
+            except Exception:
+                pass
             CONNECT_STATES.pop(user_id, None)
             return await message.reply_text("✅ 2FA verified. String session generated and saved.")
         except PasswordHashInvalid:
             return await message.reply_text("Wrong password. Send your 2FA password again.")
         except Exception as exc:
-            await temp_client.disconnect()
+            try:
+                await temp_client.disconnect()
+            except Exception:
+                pass
             CONNECT_STATES.pop(user_id, None)
             return await message.reply_text(f"2FA verification failed: {exc}")
