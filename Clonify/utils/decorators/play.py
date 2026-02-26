@@ -259,6 +259,7 @@ def CPlayWrapper(command):
             chat_id = message.chat.id
             channel = None
         playmode = await get_playmode(message.chat.id)
+        
         playty = await get_playtype(message.chat.id)
         if playty != "Everyone":
             if message.from_user.id not in SUDOERS:
@@ -284,11 +285,17 @@ def CPlayWrapper(command):
 
         if not await is_active_chat(chat_id):
             userbot = await get_assistant(chat_id)
+            assistant_peer = userbot.username or userbot.id
+            if not assistant_peer:
+                return await message.reply_text(
+                    _["call_3"].format(i.mention, "Assistant account is misconfigured")
+                )
             try:
                 try:
-                    get = await client.get_chat_member(chat_id, userbot.username)
+                    get = await client.get_chat_member(chat_id, assistant_peer)
                 except ChatAdminRequired:
                     await message.reply_text(_["call_1"])
+                    return
                 if (
                     get.status == ChatMemberStatus.BANNED
                     or get.status == ChatMemberStatus.RESTRICTED
@@ -298,6 +305,7 @@ def CPlayWrapper(command):
                             i.mention, userbot.id, userbot.name, userbot.username
                         )
                     )
+                    return
             except UserNotParticipant:
                 if chat_id in clinks:
                     invitelink = clinks[chat_id]
@@ -313,10 +321,17 @@ def CPlayWrapper(command):
                             invitelink = await client.export_chat_invite_link(chat_id)
                         except ChatAdminRequired:
                             await message.reply_text(_["call_1"])
+                            return
                         except Exception as e:
                             await message.reply_text(
                                 _["call_3"].format(i.mention, type(e).__name__)
                             )
+                            return
+
+                if not invitelink:
+                    return await message.reply_text(
+                        _["call_3"].format(i.mention, "Invalid invite link")
+                    )
 
                 if invitelink.startswith("https://t.me/+"):
                     invitelink = invitelink.replace(
@@ -349,6 +364,11 @@ def CPlayWrapper(command):
                 except:
                     pass
 
+            except Exception as e:
+                return await message.reply_text(
+                    _["call_3"].format(i.mention, type(e).__name__)
+                )
+
         return await command(
             client,
             message,
@@ -362,5 +382,3 @@ def CPlayWrapper(command):
         )
 
     return wrapper
-
-# Zeo
