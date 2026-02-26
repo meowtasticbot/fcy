@@ -6,7 +6,7 @@ from Clonify import app
 
 #--------------------------
 
-MUST_JOIN = "btw_moon"
+MUST_JOIN = "Meowstric"
 
 #--------------------------
 
