@@ -3,6 +3,9 @@ import os
 from datetime import datetime, timedelta
 from typing import Union
 
+import pyrogram
+from pyrogram import ContinuePropagation
+
 from pyrogram import Client
 from pyrogram.types import InlineKeyboardMarkup
 from pytgcalls import PyTgCalls, StreamType
@@ -37,6 +40,114 @@ from Clonify.utils.inline.play import stream_markup
 from Clonify.utils.stream.autoclear import auto_clean
 from strings import get_string
 from Clonify.utils.thumbnails import get_thumb
+
+
+from pytgcalls.mtproto import pyrogram_client as pytgcalls_pyrogram_client
+
+
+def _patch_pytgcalls_update_handler():
+    if getattr(pytgcalls_pyrogram_client.PyrogramClient, "_fcy_update_patch", False):
+        return
+
+    def patched_init(self, cache_duration: int, client: Client):
+        self._app = client
+        if pytgcalls_pyrogram_client.VersionManager.version_tuple(
+            pyrogram.__version__,
+        ) > pytgcalls_pyrogram_client.VersionManager.version_tuple('2.0.0'):
+            self._app.send = self._app.invoke
+        self._handler = {}
+        self._cache = pytgcalls_pyrogram_client.ClientCache(cache_duration, self)
+
+        @self._app.on_raw_update()
+        async def on_update(_, update, __, data2):
+            if isinstance(update, pytgcalls_pyrogram_client.UpdateGroupCallParticipants):
+                participants = update.participants
+                for participant in participants:
+                    result = self._cache.set_participants_cache(
+                        update.call.id,
+                        self.chat_id(participant.peer),
+                        participant.muted,
+                        participant.volume,
+                        participant.can_self_unmute,
+                        participant.video is not None or participant.presentation is not None,
+                        participant.presentation is not None,
+                        participant.video is not None,
+                        participant.raise_hand_rating,
+                        participant.left,
+                    )
+                    if result is not None and 'PARTICIPANTS_HANDLER' in self._handler:
+                        await self._handler['PARTICIPANTS_HANDLER'](
+                            self._cache.get_chat_id(update.call.id),
+                            result,
+                            participant.just_joined,
+                            participant.left,
+                        )
+
+            if isinstance(update, pytgcalls_pyrogram_client.UpdateGroupCall):
+                chat_id = None
+                update_chat_id = getattr(update, 'chat_id', None)
+                if isinstance(data2, dict) and update_chat_id is not None and update_chat_id in data2:
+                    chat_id = self.chat_id(data2[update_chat_id])
+                else:
+                    try:
+                        chat_id = self._cache.get_chat_id(update.call.id)
+                    except Exception:
+                        chat_id = None
+
+                if chat_id is not None:
+                    if isinstance(update.call, pytgcalls_pyrogram_client.GroupCall):
+                        if update.call.schedule_date is None:
+                            self._cache.set_cache(
+                                chat_id,
+                                pytgcalls_pyrogram_client.InputGroupCall(
+                                    access_hash=update.call.access_hash,
+                                    id=update.call.id,
+                                ),
+                            )
+                    if isinstance(update.call, pytgcalls_pyrogram_client.GroupCallDiscarded):
+                        self._cache.drop_cache(chat_id)
+                        if 'CLOSED_HANDLER' in self._handler:
+                            await self._handler['CLOSED_HANDLER'](chat_id)
+
+            if isinstance(update, pytgcalls_pyrogram_client.UpdateChannel):
+                chat_id = self.chat_id(update)
+                if len(data2) > 0 and update.channel_id in data2:
+                    if isinstance(data2[update.channel_id], pytgcalls_pyrogram_client.ChannelForbidden):
+                        self._cache.drop_cache(chat_id)
+                        if 'KICK_HANDLER' in self._handler:
+                            await self._handler['KICK_HANDLER'](chat_id)
+
+            if isinstance(update, pytgcalls_pyrogram_client.UpdateNewChannelMessage) or isinstance(update, pytgcalls_pyrogram_client.UpdateNewMessage):
+                if isinstance(update.message, pytgcalls_pyrogram_client.MessageService):
+                    if isinstance(update.message.action, pytgcalls_pyrogram_client.MessageActionInviteToGroupCall):
+                        if 'INVITE_HANDLER' in self._handler:
+                            await self._handler['INVITE_HANDLER'](update.message.action)
+                    if isinstance(update.message.action, pytgcalls_pyrogram_client.MessageActionChatDeleteUser):
+                        if isinstance(update.message.peer_id, pytgcalls_pyrogram_client.PeerChat):
+                            chat_id = self.chat_id(update.message.peer_id)
+                            peer_chat_id = update.message.peer_id.chat_id
+                            if isinstance(data2, dict) and peer_chat_id in data2 and isinstance(data2[peer_chat_id], pytgcalls_pyrogram_client.ChatForbidden):
+                                self._cache.drop_cache(chat_id)
+                                if 'KICK_HANDLER' in self._handler:
+                                    await self._handler['KICK_HANDLER'](chat_id)
+
+            if isinstance(data2, dict):
+                for group_id in data2:
+                    if isinstance(update, pytgcalls_pyrogram_client.UpdateNewChannelMessage) or isinstance(update, pytgcalls_pyrogram_client.UpdateNewMessage):
+                        if isinstance(update.message, pytgcalls_pyrogram_client.MessageService):
+                            if isinstance(data2[group_id], pytgcalls_pyrogram_client.Channel) or isinstance(data2[group_id], pytgcalls_pyrogram_client.Chat):
+                                chat_id = self.chat_id(data2[group_id])
+                                if data2[group_id].left:
+                                    self._cache.drop_cache(chat_id)
+                                    if 'LEFT_HANDLER' in self._handler:
+                                        await self._handler['LEFT_HANDLER'](chat_id)
+            raise ContinuePropagation()
+
+    pytgcalls_pyrogram_client.PyrogramClient.__init__ = patched_init
+    pytgcalls_pyrogram_client.PyrogramClient._fcy_update_patch = True
+
+
+_patch_pytgcalls_update_handler()
 
 autoend = {}
 counter = {}
