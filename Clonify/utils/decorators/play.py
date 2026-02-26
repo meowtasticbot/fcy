@@ -286,7 +286,8 @@ def CPlayWrapper(command):
             userbot = await get_assistant(chat_id)
             try:
                 try:
-                    get = await client.get_chat_member(chat_id, userbot.username)
+                    # Username can be missing for assistant accounts; user id is always available.
+                    get = await client.get_chat_member(chat_id, userbot.id)
                 except ChatAdminRequired:
                     await message.reply_text(_["call_1"])
                 if (
