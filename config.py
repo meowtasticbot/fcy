@@ -57,7 +57,7 @@ HEROKU_API_KEY = getenv("HEROKU_API_KEY")
 SOURCE = getenv("SOURCE", "https://t.me/Meowstric")
 UPSTREAM_REPO = getenv(
     "UPSTREAM_REPO",
-    "https://github.com/abcdefghij803/Clonify",
+    "https://github.com/meowtasticbot/fcy",
 )
 UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "master")
 GIT_TOKEN = getenv(
